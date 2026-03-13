@@ -1,12 +1,9 @@
 /**
- * M5Stack Core Ink - Todo List - Simplified Version
+ * M5Stack Core Ink - Todo List - Working Version
  * 
- * Features:
- * - Display todo items on e-ink screen
- * - Check/uncheck items with buttons
- * - Persistent storage (saves to flash)
- * 
- * Hardware: M5Stack Core Ink
+ * API Reference:
+ * - drawString(const char* string, int32_t x, int32_t y)
+ * - fillRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color)
  */
 
 #include <M5CoreInk.h>
@@ -19,7 +16,7 @@
 #define MAX_TODOS 10
 
 struct TodoItem {
-    String text;
+    char text[30];
     bool done;
 };
 
@@ -32,10 +29,9 @@ bool needsUpdate = true;
 enum Mode { VIEW_LIST, ADD_ITEM, DELETE_ITEM };
 Mode currentMode = VIEW_LIST;
 
-// Forward declarations
 void drawInterface();
 void handleButtons();
-void addTodo(String text);
+void addTodo(const char* text);
 void deleteTodo(int index);
 void saveTodos();
 void loadTodos();
@@ -44,21 +40,17 @@ void blinkLED(int pin, int duration);
 void setup() {
     M5.begin();
     
-    // Initialize LED
     pinMode(LED_RED, OUTPUT);
     digitalWrite(LED_RED, HIGH);
     
-    // Initialize buttons
     pinMode(BUTTON_A, INPUT_PULLUP);
     pinMode(BUTTON_B, INPUT_PULLUP);
     pinMode(BUTTON_C, INPUT_PULLUP);
     
-    // Initialize display
     M5.M5Ink.begin();
     M5.M5Ink.clear();
     delay(100);
     
-    // Load todos
     loadTodos();
     drawInterface();
 }
@@ -78,7 +70,6 @@ void handleButtons() {
     static unsigned long lastPress = 0;
     if (millis() - lastPress < 300) return;
     
-    // Button A - Previous / Cancel / Delete
     if (digitalRead(BUTTON_A) == LOW) {
         lastPress = millis();
         
@@ -100,7 +91,6 @@ void handleButtons() {
         }
     }
     
-    // Button B - Toggle done / Confirm
     if (digitalRead(BUTTON_B) == LOW) {
         lastPress = millis();
         
@@ -112,7 +102,9 @@ void handleButtons() {
                 blinkLED(LED_RED, 50);
             }
         } else if (currentMode == ADD_ITEM) {
-            addTodo("Task " + String(todoCount + 1));
+            char buf[20];
+            sprintf(buf, "Task %d", todoCount + 1);
+            addTodo(buf);
             currentMode = VIEW_LIST;
             needsUpdate = true;
             blinkLED(LED_RED, 200);
@@ -122,7 +114,6 @@ void handleButtons() {
         }
     }
     
-    // Button C - Next / Add mode
     if (digitalRead(BUTTON_C) == LOW) {
         lastPress = millis();
         
@@ -139,7 +130,9 @@ void handleButtons() {
             }
             needsUpdate = true;
         } else if (currentMode == ADD_ITEM) {
-            addTodo("Task " + String(todoCount + 1));
+            char buf[20];
+            sprintf(buf, "Task %d", todoCount + 1);
+            addTodo(buf);
             needsUpdate = true;
             blinkLED(LED_RED, 50);
         }
@@ -149,45 +142,45 @@ void handleButtons() {
 void drawInterface() {
     M5.M5Ink.clear();
     
-    // Use simple text drawing
-    M5.M5Ink.drawString(10, 5, "TODO LIST");
+    // Title: drawString(const char*, x, y)
+    M5.M5Ink.drawString("TODO LIST", 10, 5);
     
-    // Draw line
-    for (int x = 0; x < 200; x++) {
-        M5.M5Ink.drawPix(x, 22, BLACK);
-    }
+    // Line under title
+    M5.M5Ink.fillRect(0, 22, 200, 1, BLACK);
     
-    // Draw mode at bottom
-    String modeText;
+    // Mode indicator at bottom
+    const char* modeText;
     switch(currentMode) {
         case VIEW_LIST: modeText = "[VIEW] A:Up B:Check C:Down"; break;
         case ADD_ITEM: modeText = "[ADD] A:Cancel B:Add"; break;
         case DELETE_ITEM: modeText = "[DEL] A:Del B:Cancel"; break;
+        default: modeText = "";
     }
-    M5.M5Ink.drawString(5, 185, modeText.c_str());
+    M5.M5Ink.drawString(modeText, 5, 185);
     
-    // Draw todo items
+    // Todo items
     int y = 30;
     for (int i = 0; i < todoCount && i < 8; i++) {
-        String line;
+        char line[35];
         if (todos[i].done) {
-            line = "[X] " + todos[i].text;
+            sprintf(line, "[X] %s", todos[i].text);
         } else {
-            line = "[ ] " + todos[i].text;
+            sprintf(line, "[ ] %s", todos[i].text);
         }
         
         // Truncate if too long
-        if (line.length() > 25) {
-            line = line.substring(0, 22) + "...";
+        if (strlen(line) > 28) {
+            line[25] = '.';
+            line[26] = '.';
+            line[27] = '.';
+            line[28] = '\0';
         }
         
-        M5.M5Ink.drawString(5, y, line.c_str());
+        M5.M5Ink.drawString(line, 5, y);
         
-        // Highlight selected
+        // Highlight selected with underline
         if (i == selectedIndex && currentMode != ADD_ITEM) {
-            for (int x = 0; x < 200; x++) {
-                M5.M5Ink.drawPix(x, y + 8, BLACK);
-            }
+            M5.M5Ink.fillRect(0, y + 14, 200, 2, BLACK);
         }
         
         y += 18;
@@ -195,19 +188,21 @@ void drawInterface() {
     
     // Empty state
     if (todoCount == 0) {
-        M5.M5Ink.drawString(60, 80, "No todos!");
-        M5.M5Ink.drawString(50, 100, "Press C to add");
+        M5.M5Ink.drawString("No todos!", 60, 80);
+        M5.M5Ink.drawString("Press C to add", 50, 100);
     }
     
-    // Draw count
-    String countStr = String(todoCount) + "/" + String(MAX_TODOS);
-    M5.M5Ink.drawString(170, 5, countStr.c_str());
+    // Count
+    char countStr[10];
+    sprintf(countStr, "%d/%d", todoCount, MAX_TODOS);
+    M5.M5Ink.drawString(countStr, 170, 5);
 }
 
-void addTodo(String text) {
+void addTodo(const char* text) {
     if (todoCount >= MAX_TODOS) return;
     
-    todos[todoCount].text = text;
+    strncpy(todos[todoCount].text, text, 29);
+    todos[todoCount].text[29] = '\0';
     todos[todoCount].done = false;
     todoCount++;
     
@@ -235,9 +230,11 @@ void saveTodos() {
     prefs.putInt("count", todoCount);
     
     for (int i = 0; i < todoCount; i++) {
-        String key = "todo" + String(i);
-        prefs.putString((key + "_text").c_str(), todos[i].text);
-        prefs.putBool((key + "_done").c_str(), todos[i].done);
+        char keyT[20], keyD[20];
+        sprintf(keyT, "t%d", i);
+        sprintf(keyD, "d%d", i);
+        prefs.putString(keyT, todos[i].text);
+        prefs.putBool(keyD, todos[i].done);
     }
     
     prefs.end();
@@ -250,9 +247,14 @@ void loadTodos() {
     if (todoCount > MAX_TODOS) todoCount = MAX_TODOS;
     
     for (int i = 0; i < todoCount; i++) {
-        String key = "todo" + String(i);
-        todos[i].text = prefs.getString((key + "_text").c_str(), "Task " + String(i + 1));
-        todos[i].done = prefs.getBool((key + "_done").c_str(), false);
+        char keyT[20], keyD[20];
+        sprintf(keyT, "t%d", i);
+        sprintf(keyD, "d%d", i);
+        
+        String t = prefs.getString(keyT, "");
+        strncpy(todos[i].text, t.c_str(), 29);
+        todos[i].text[29] = '\0';
+        todos[i].done = prefs.getBool(keyD, false);
     }
     
     prefs.end();
