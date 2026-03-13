@@ -1,56 +1,38 @@
 /**
- * M5Stack Core Ink - Todo List
+ * M5Stack Core Ink - Todo List - Simplified Version
  * 
  * Features:
  * - Display todo items on e-ink screen
  * - Check/uncheck items with buttons
  * - Persistent storage (saves to flash)
- * - Low power mode (e-ink retains display)
  * 
  * Hardware: M5Stack Core Ink
- * - E-ink display: 200x200
- * - Buttons: A (GPIO 37), B (GPIO 38), C (GPIO 39)
- * - LEDs: RED (GPIO 10)
  */
 
-#include <Arduino.h>  // Must be first!
 #include <M5CoreInk.h>
 #include <Preferences.h>
-#include <ArduinoJson.h>
 
-// Button pins
 #define BUTTON_A 37
 #define BUTTON_B 38
 #define BUTTON_C 39
 #define LED_RED 10
-
-// Display dimensions
-#define SCREEN_WIDTH 200
-#define SCREEN_HEIGHT 200
 #define MAX_TODOS 10
 
-// Todo item structure
 struct TodoItem {
     String text;
     bool done;
 };
 
-// Global variables
 Preferences prefs;
 TodoItem todos[MAX_TODOS];
 int todoCount = 0;
 int selectedIndex = 0;
 bool needsUpdate = true;
 
-// Modes
-enum Mode {
-    VIEW_LIST,
-    ADD_ITEM,
-    DELETE_ITEM
-};
+enum Mode { VIEW_LIST, ADD_ITEM, DELETE_ITEM };
 Mode currentMode = VIEW_LIST;
 
-// Function declarations (forward declarations)
+// Forward declarations
 void drawInterface();
 void handleButtons();
 void addTodo(String text);
@@ -61,16 +43,10 @@ void blinkLED(int pin, int duration);
 
 void setup() {
     M5.begin();
-    Serial.begin(115200);
-    delay(1000);
-    
-    Serial.println("\n========================================");
-    Serial.println("  Core Ink Todo List");
-    Serial.println("========================================");
     
     // Initialize LED
     pinMode(LED_RED, OUTPUT);
-    digitalWrite(LED_RED, HIGH);  // Off (active low)
+    digitalWrite(LED_RED, HIGH);
     
     // Initialize buttons
     pinMode(BUTTON_A, INPUT_PULLUP);
@@ -82,16 +58,9 @@ void setup() {
     M5.M5Ink.clear();
     delay(100);
     
-    // Load todos from flash
+    // Load todos
     loadTodos();
-    
-    // Initial display
     drawInterface();
-    
-    Serial.println("Started!");
-    Serial.println("Button A: Previous");
-    Serial.println("Button B: Toggle done");
-    Serial.println("Button C: Next / Add");
 }
 
 void loop() {
@@ -178,61 +147,61 @@ void handleButtons() {
 }
 
 void drawInterface() {
-    // Clear screen
     M5.M5Ink.clear();
     
-    // Create sprite for drawing
-    Ink_Sprite sprite(&M5.M5Ink);
-    sprite.clear();
+    // Use simple text drawing
+    M5.M5Ink.drawString(10, 5, "TODO LIST");
     
-    // Draw title
-    sprite.drawString("TODO LIST", 10, 5);
-    sprite.drawLine(0, 22, 200, 22, BLACK);
+    // Draw line
+    for (int x = 0; x < 200; x++) {
+        M5.M5Ink.drawPix(x, 22, BLACK);
+    }
     
-    // Draw mode indicator
+    // Draw mode at bottom
     String modeText;
     switch(currentMode) {
         case VIEW_LIST: modeText = "[VIEW] A:Up B:Check C:Down"; break;
         case ADD_ITEM: modeText = "[ADD] A:Cancel B:Add"; break;
-        case DELETE_ITEM: modeText = "[DEL] A:Delete B:Cancel"; break;
+        case DELETE_ITEM: modeText = "[DEL] A:Del B:Cancel"; break;
     }
-    sprite.drawString(modeText, 5, 185);
+    M5.M5Ink.drawString(5, 185, modeText.c_str());
     
     // Draw todo items
     int y = 30;
     for (int i = 0; i < todoCount && i < 8; i++) {
-        // Selection indicator
-        if (i == selectedIndex && currentMode != ADD_ITEM) {
-            sprite.fillRect(0, y - 2, 200, 18, BLACK);
-            sprite.setTextColor(WHITE);
+        String line;
+        if (todos[i].done) {
+            line = "[X] " + todos[i].text;
         } else {
-            sprite.setTextColor(BLACK);
+            line = "[ ] " + todos[i].text;
         }
         
-        // Checkbox and text
-        String checkbox = todos[i].done ? "[X]" : "[ ]";
-        String text = todos[i].text;
-        if (text.length() > 18) {
-            text = text.substring(0, 15) + "...";
+        // Truncate if too long
+        if (line.length() > 25) {
+            line = line.substring(0, 22) + "...";
         }
         
-        sprite.drawString(checkbox + " " + text, 5, y);
+        M5.M5Ink.drawString(5, y, line.c_str());
         
-        sprite.setTextColor(BLACK);
+        // Highlight selected
+        if (i == selectedIndex && currentMode != ADD_ITEM) {
+            for (int x = 0; x < 200; x++) {
+                M5.M5Ink.drawPix(x, y + 8, BLACK);
+            }
+        }
+        
         y += 18;
     }
     
     // Empty state
     if (todoCount == 0) {
-        sprite.drawString("No todos!", 60, 80);
-        sprite.drawString("Press C to add", 50, 100);
+        M5.M5Ink.drawString(60, 80, "No todos!");
+        M5.M5Ink.drawString(50, 100, "Press C to add");
     }
     
     // Draw count
-    sprite.drawString(String(todoCount) + "/" + String(MAX_TODOS), 170, 5);
-    
-    // Push to display
-    sprite.pushSprite();
+    String countStr = String(todoCount) + "/" + String(MAX_TODOS);
+    M5.M5Ink.drawString(170, 5, countStr.c_str());
 }
 
 void addTodo(String text) {
@@ -243,7 +212,6 @@ void addTodo(String text) {
     todoCount++;
     
     saveTodos();
-    Serial.println("Added: " + text);
 }
 
 void deleteTodo(int index) {
@@ -260,7 +228,6 @@ void deleteTodo(int index) {
     if (selectedIndex < 0) selectedIndex = 0;
     
     saveTodos();
-    Serial.println("Deleted item at index " + String(index));
 }
 
 void saveTodos() {
@@ -274,7 +241,6 @@ void saveTodos() {
     }
     
     prefs.end();
-    Serial.println("Todos saved!");
 }
 
 void loadTodos() {
@@ -290,13 +256,10 @@ void loadTodos() {
     }
     
     prefs.end();
-    Serial.print("Loaded ");
-    Serial.print(todoCount);
-    Serial.println(" todos");
 }
 
 void blinkLED(int pin, int duration) {
-    digitalWrite(pin, LOW);  // On (active low)
+    digitalWrite(pin, LOW);
     delay(duration);
-    digitalWrite(pin, HIGH); // Off
+    digitalWrite(pin, HIGH);
 }
